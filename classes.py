@@ -3,6 +3,8 @@ from physics import Time, ASPHALT_DRAG, ADH, MAX_SPEED, MAX_SPEED_BACKWARDS
 import numpy as np
 import time
 
+from gui_manager import world
+
 
 class Point:
     def __init__(self, x=0, y=0, radius=3, color='white'):
@@ -11,7 +13,7 @@ class Point:
         self.r = radius
         self.color = color
 
-    def display(self, world, tag='debug'):
+    def display(self, tag='debug'):
         world.create_oval(self.x - self.r, self.y - self.r,
                           self.x + self.r, self.y + self.r, fill=self.color, tag=tag)
         world.pack()
@@ -43,7 +45,7 @@ class Car:
         self.dtheta = self.omega * self.T.dt  # angle by which a car rotates (at each time step) when turning
         self.leave_trail = None
 
-    def display(self, world):
+    def display(self):
         """
        B _________ A       wheels : four small rectangles w on the sides of the rectangle
         |         |        coordinates : w1x, w1y, w2x, w2y, ...
@@ -73,8 +75,11 @@ class Car:
 
         world.pack()
 
-    def erase(self, world, *args):
-        """erase every part of the car except the ones specified in args"""
+    def erase(self, *args):
+        """erase every part of the car except the ones specified in argsi
+        wfl = wheel front left
+        wbr = wheel bottom right
+        etc"""
         if not self.leave_trail == 'shadow':
             if self.name + "_wfl" not in args:
                 world.delete(self.name + "_wfl")
@@ -87,7 +92,7 @@ class Car:
             if self.name not in args:
                 world.delete(self.name)
         if self.leave_trail == 'point':
-            Point(self.x, self.y).display(world)
+            Point(self.x, self.y).display()
 
     def accelerate(self, acc):
         self.speed += acc * self.T.dt
@@ -183,14 +188,14 @@ class Curve:
         s = "Curve from ({0}, {1}) to ({2}, {3})".format(self.xa, self.ya, self.xb, self.yb)
         return s
 
-    def display(self, world, step=10, f=None):
+    def display(self, step=10, f=None):
         if not f:
             f = self.function
         t = min(self.xa, self.xb)
         while t < max(self.xa, self.xb):
-            Point(t, f(t), radius=5).display(world, tag='test')
+            # Point(t, f(t), radius=5).display(tag='test')
             world.pack()
-            # world.create_line(t, f(t), t+step, f(t+step), fill='grey', width=5)
+            world.create_line(t, f(t), t+step, f(t+step), fill='grey', width=5)
             t += step
 
     def points(self, step, f=None):
@@ -268,7 +273,7 @@ class TrackPiece:
         s += '\n' + "x : {0}, y : {1}".format(self.x, self.y)
         return s
 
-    def display(self, world, prec, succ, curv_p=10, curv_s=10, pre_suc=0, highlight=False):
+    def display(self, prec, succ, curv_p=10, curv_s=10, pre_suc=0, highlight=False):
         """display the track between Trackpoints prec, self and succ
         with curvatures curv_p for prec and curv_s for succ
 
@@ -308,8 +313,8 @@ class TrackPiece:
             c_prec_g = Curve(agx, agy, bgx, bgy, curv_p)
             c_prec_d = Curve(adx, ady, bdx, bdy, curv_p)
 
-            c_prec_g.display(world)
-            c_prec_d.display(world)
+            c_prec_g.display()
+            c_prec_d.display()
 
         if pre_suc == 0 or pre_suc == 1 and not self.is_finish:
             cgx = succ.x + np.cos(succ.angle) * succ.width / 2
@@ -328,10 +333,10 @@ class TrackPiece:
                                       fill='blue')
                 self.checkpoints.append(Checkpoint(*g, *d))
 
-            c_succ_g.display(world)
-            c_succ_d.display(world)
+            c_succ_g.display()
+            c_succ_d.display()
 
-    def highlight(self, world):
+    def highlight(self):
         gx = self.x + np.cos(self.angle) * self.width / 2
         gy = self.y - np.sin(self.angle) * self.width / 2
 
@@ -416,14 +421,14 @@ class Track:
                 (Curve(bgx, bgy, cgx, cgy, curv_s), Curve(bdx, bdy, cdx, cdy, curv_s))
             )
 
-    def display(self, world, text=True):
+    def display(self, text=True):
         for i in range(len(self.pieces)):
-            self.pieces[i].display(world, self.pieces[i-1], self.pieces[(i+1) % len(self.pieces)],
+            self.pieces[i].display(self.pieces[i-1], self.pieces[(i+1) % len(self.pieces)],
                                    self.curvatures[i-1], self.curvatures[(i+1) % len(self.pieces)], 1)
         for p in self.pieces:
             self.ai_checkpoints += p.checkpoints
 
-    def display_text(self, world, text_dic):
+    def display_text(self, text_dic):
         x = 150  # position of checkpoint text
         y = 30
         if text_dic is None:
@@ -484,10 +489,10 @@ class Track:
         self.ai_checkpoint[car.name] = None
         self.podium.append(car)
 
-    def start_race(self, cars, world, window, countdown=True):
+    def start_race(self, cars, window, countdown=True):
         world.delete('all')
         self.podium = []
-        self.display(world)
+        self.display()
         start_time = time.time()
         pos = 0
         un_sur_deux = 1
@@ -505,10 +510,10 @@ class Track:
             self.next_ai_checkpoint(car)
             self.total_time[car.name] = start_time - 3
 
-            car.display(world)
+            car.display()
         if countdown:
             for i in range(3, 0, -1):
-                self.display_text(world, {'countdown': str(i)})
+                self.display_text({'countdown': str(i)})
                 world.pack()
                 window.update()
                 time.sleep(1)
@@ -546,7 +551,7 @@ class Track:
         self.ai_checkpoint[car.name] = self.ai_checkpoints[(i+1)%len(self.ai_checkpoints)]
 
 
-    def update(self, world):
+    def update(self):
         output = {}
         tmp = time.time()
         for c in self.pieces:
@@ -568,7 +573,7 @@ class Track:
             if checkpoint is not None and checkpoint.reached(car):
                 output['reward' + car.name] = 1
                 self.next_checkpoint(car)
-                checkpoint.highlight(world)
+                checkpoint.highlight()
 
                 if checkpoint == self.start:
                     self.current_lap[name] += 1
@@ -668,15 +673,15 @@ def closest_point(car, track, angle):
 
 
 
-def distances(car, track, nb_angles=8, world=None):
-    if world is not None:
+def distances(car, track, nb_angles=8, debugging=False):
+    if debugging and world is not None:
         world.delete('debug')
     dists = []
     for i in range(nb_angles):
         theta = -180 + i*360/(nb_angles)
         x, y = closest_point(car, track, theta)
         dists.append(distance(car.x, car.y, x, y))
-        if world is not None:
+        if debugging and world is not None:
             world.create_line(car.x, car.y, x, y, fill='green', tag='debug')
     return dists
 

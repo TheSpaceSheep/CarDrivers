@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import math
 import hyperparameters as hp
 from functions import *
+import physics
 from classes import distances, is_out
 from random import random, sample, randint
 from collections import namedtuple
@@ -40,16 +41,16 @@ class DQN(nn.Module):
         self.cuda(hp.DEVICE)
         self.lin1 = nn.Linear(input_dim, 24)
         self.relu = torch.relu
-        self.lin2 = nn.Linear(24, 32)
+        self.lin2 = nn.Linear(24, 24)
         self.relu2 = torch.relu
-        self.action = nn.Linear(32, 8)
-        self.probas = torch.relu
+        self.action = nn.Linear(24, 8)
+        self.relu3 = torch.relu
 
 
     def forward(self, inputs):
         output = self.relu(self.lin1(inputs))
         output = self.relu2(self.lin2(output))
-        output = self.probas(self.action(output))
+        output = self.relu3(self.action(output))
         return output
 
 
@@ -60,11 +61,12 @@ class RL_Driver():
         self.prediction_net = DQN(hp.NB_SENSORS+1).to(hp.DEVICE)
         self.target_net = DQN(hp.NB_SENSORS+1).to(hp.DEVICE)
         self.target_net.load_state_dict(self.prediction_net.state_dict())
-        self.target_net.eval()
+        self.target_net.eval()  # target net will not be trained
         self.memory = ReplayMemory(10_000)
         self.optimizer = opt.Adam(self.prediction_net.parameters(),
                                   lr=hp.LEARNING_RATE)
         self.steps_done = 0
+        self.episode_steps = 0
         self.last_state = None
         self.last_action = None
 
@@ -76,39 +78,59 @@ class RL_Driver():
 
     def sensors(self):
         if is_out(self.track, self.car):
+            #TODO: make car see even when not on track
             return torch.tensor([0] * (hp.NB_SENSORS + 1), device=hp.DEVICE,
                                 dtype=torch.float32)
         else:
             normalized = [d/500 for d in distances(self.car, self.track,
-                                                   nb_angles=hp.NB_SENSORS)]
-            inputs = [self.car.speed/200, *normalized]
+                                                   nb_angles=hp.NB_SENSORS,
+                                                   debugging=True)]
+            inputs = [self.car.speed/physics.MAX_SPEED, *normalized]
+
             return torch.tensor(inputs, device=hp.DEVICE, dtype=torch.float32)
 
 
-    def decision(self):
+    def decision(self, state):
         """probabilities returned by net correspond to:
            [up, up-right, right, right-down, down, down-left,
             left, left-up]"""
         sample = random()
         eps_threshold = hp.EPS_END + (hp.EPS_START - hp.EPS_END) * \
         math.exp(-1. * self.steps_done * hp.EPS_DECAY)
-        inputs = self.sensors()
-        # print(sample, eps_threshold)
+
         if sample > eps_threshold:
+            inputs = state
             with torch.no_grad():
-                probas = self.prediction_net.forward(inputs)
-                imax = probas.max(0).indices.item()
-                # imax = probas
+                output = self.prediction_net.forward(inputs)
+                imax = output.max(0).indices.item()
         else:
             print('taking random action')
             imax = randint(0, 7)
-            # imax = (random(), random())
 
         self.steps_done += 1
         if self.steps_done % hp.TARGET_UPDATE == 0:
             self.target_net.load_state_dict(self.prediction_net.state_dict())
+        self.episode_steps += 1
 
         return torch.tensor([imax], device=hp.DEVICE)
+
+    def action_to_keys(self, action):
+        keys_pressed = []
+
+        if action in (0, 1, 7):
+            keys_pressed.append(self.car.up)
+        if action in (1, 2, 3):
+            keys_pressed.append(self.car.right)
+        if action in (3, 4, 5):
+            keys_pressed.append(self.car.down)
+        if action in (5, 6, 7):
+            keys_pressed.append(self.car.left)
+
+        return keys_pressed
+
+    def new_episode(self):
+        self.episode_steps = 0
+
 
     def train(self):
         if hp.BATCH_SIZE > len(self.memory):
