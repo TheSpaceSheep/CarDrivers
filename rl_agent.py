@@ -39,11 +39,11 @@ class DQN(nn.Module):
     def __init__(self, input_dim):
         super().__init__()
         self.cuda(hp.DEVICE)
-        self.lin1 = nn.Linear(input_dim, 24)
+        self.lin1 = nn.Linear(input_dim, 10)
         self.relu = torch.relu
-        self.lin2 = nn.Linear(24, 24)
+        self.lin2 = nn.Linear(10, 10)
         self.relu2 = torch.relu
-        self.action = nn.Linear(24, 8)
+        self.action = nn.Linear(10, 9)
         self.relu3 = torch.relu
 
 
@@ -105,12 +105,12 @@ class RL_Driver():
                 imax = output.max(0).indices.item()
         else:
             print('taking random action')
-            imax = randint(0, 7)
+            imax = randint(0, 8)
 
         self.steps_done += 1
         if self.steps_done % hp.TARGET_UPDATE == 0:
             self.target_net.load_state_dict(self.prediction_net.state_dict())
-        self.episode_steps += 1
+            print("updating target network")
 
         return torch.tensor([imax], device=hp.DEVICE)
 
@@ -143,20 +143,19 @@ class RL_Driver():
         action_batch = torch.stack(batch.action)
         reward_batch = torch.tensor(batch.reward, dtype=torch.float32, device=hp.DEVICE)
         next_state_batch = torch.stack(batch.next_state)
-
         q_sa = self.prediction_net(state_batch).gather(1, action_batch).squeeze(1)
 
-        final_states_locations = next_state_batch \
-                .max(dim=1)[0].eq(0).type(torch.bool)
+        final_states_locations = next_state_batch.max(dim=1)[0].eq(0).type(torch.bool)
         non_final_states_locations = (final_states_locations == False)
         non_final_states = next_state_batch[non_final_states_locations]
         q_ns = torch.zeros(hp.BATCH_SIZE).to(hp.DEVICE)
         q_ns[non_final_states_locations] = self.target_net(non_final_states).max(1)[0].detach()
 
 
-        expected_qsa = (reward_batch * hp.GAMMA) + q_ns
+        expected_qsa = reward_batch + hp.GAMMA * q_ns
 
         loss = F.mse_loss(q_sa, expected_qsa)
+        print(round(loss.item(), 2))
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()

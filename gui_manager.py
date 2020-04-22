@@ -23,17 +23,11 @@ def on_closing():
 def keyup(e):
     if e.keysym in history:
         history.pop(history.index(e.keysym))
-
-    for car in cars:
-        if e.keysym in [car.left, car.right]:
-            car.turn("straight")
-
-    if e.keysym == 'h':
-        T.dilate(1)
+        history.append(e.keysym + "-UP")
 
 
 def keydown(e):
-    return # to disable key inputs
+    # return # uncomment to disable human key inputs
     if e.keysym not in history:
         history.append(e.keysym)
 

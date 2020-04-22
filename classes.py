@@ -21,7 +21,7 @@ class Point:
 
 class Car:
     def __init__(self, x=0, y=0, heading=0, color='red', width=20, length=35,
-                 mass=700, thrust=6, breaks=20, name="car", T=Time(),
+                 mass=700, thrust=10, breaks=20, name="car", T=Time(),
                  controls=('Up', 'Left', 'Down', 'Right')):
         self.name = name
         self.x = x
